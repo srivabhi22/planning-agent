@@ -4,3 +4,4 @@ cache/
 __pycache__/
 *.pyc
 .DS_Store
+DESIGN_DECISIONS.md

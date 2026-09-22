@@ -74,7 +74,7 @@ def run(form: dict, free_text: str | None, emit) -> dict:
         ctx = build_context(prof, trace)
     except LocationNotFound as e:
         trace("Context", str(e), "Couldn't find this location on the map — asking the user")
-        return {"questions": [f"I couldn't find “{e}” on the map. Could you give a nearby landmark or a better-known area name?"]}
+        return {"questions": [f"I couldn't find the city “{prof.city}” on the map. Could you check the spelling or name a nearby bigger city?"]}
     run_state().target_date = ctx.date
     load_local(prof, ctx, trace)
 

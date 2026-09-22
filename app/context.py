@@ -1,29 +1,84 @@
 """M2 — Context Builder: geocode, Saturday time window, hourly weather, AQI, sunset."""
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 
 from .models import DayContext, HourWeather, UserProfile
-from .util import HTTP, cache_get, cache_set
+from .util import HTTP, cache_get, cache_set, log
 
 DAY_START, DAY_END = (7, 0), (22, 30)  # a realistic "full day" ends ~10:30 PM
 
 
-def geocode(city: str, area: str | None) -> tuple[float, float, str]:
+def _google_find(query: str) -> tuple[float, float, str] | None:
+    """Google Places text search — finds schools, offices, landmarks, societies that OpenStreetMap often lacks."""
+    key = os.getenv("GOOGLE_MAPS_API_KEY")
+    if not key:
+        return None
+    r = HTTP.post("https://places.googleapis.com/v1/places:searchText",
+                  headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": "places.displayName,places.location,places.formattedAddress"},
+                  json={"textQuery": query, "maxResultCount": 1, "regionCode": "IN"})
+    r.raise_for_status()
+    pl = (r.json().get("places") or [None])[0]
+    if not pl:
+        return None
+    name = (pl.get("displayName") or {}).get("text") or query
+    if not _matches(query, f"{name} {pl.get('formattedAddress', '')}"):
+        return None  # Google always returns *something*; reject results unrelated to what was typed
+    return pl["location"]["latitude"], pl["location"]["longitude"], name
+
+
+def _matches(query: str, found: str) -> bool:
+    """At least one meaningful word of the typed place (before the city) appears in the result's name/address."""
+    import re
+    norm = lambda t: re.sub(r"[^a-z0-9 ]", " ", t.lower())
+    words = [w for w in norm(query.split(",")[0]).split() if len(w) > 2 and w not in {"the", "near", "sector", "road", "nagar"}]
+    hay = norm(found)
+    return not words or any(w in hay or w.rstrip("s") in hay for w in words)
+
+
+def _osm_find(query: str) -> tuple[float, float, str] | None:
+    r = HTTP.get("https://nominatim.openstreetmap.org/search", params={"q": query, "format": "json", "limit": 1})
+    r.raise_for_status()
+    js = r.json()
+    if not js or not _matches(query, js[0].get("display_name", "")):
+        return None
+    return float(js[0]["lat"]), float(js[0]["lon"]), js[0]["display_name"].split(",")[0]
+
+
+def _find(query: str):
+    for finder in (_google_find, _osm_find):
+        try:
+            found = finder(query)
+        except Exception as e:  # rate limits / outages must not look like "location not found"
+            log.warning("Geocoding via %s failed for %r: %s", finder.__name__, query, str(e)[:150])
+            continue
+        if found:
+            return found
+    return None
+
+
+def geocode(city: str, area: str | None, notes: list | None = None) -> tuple[float, float, str]:
+    """Exact start point inside the city (Google → OpenStreetMap), else the city centre (with a note).
+    Raises only if even the city can't be found — then the user is asked."""
+    from .util import haversine_km
     q = f"{area}, {city}" if area else city
     hit = cache_get("geocode", q.lower())
     if hit:
         return hit[0], hit[1], hit[2]
-    for query in ([q, city] if area else [q]):
-        r = HTTP.get("https://nominatim.openstreetmap.org/search",
-                     params={"q": query, "format": "json", "limit": 1})
-        r.raise_for_status()
-        js = r.json()
-        if js:
-            out = (float(js[0]["lat"]), float(js[0]["lon"]), js[0]["display_name"].split(",")[0] + (f", {city}" if area else ""))
-            cache_set("geocode", q.lower(), out)
-            return out
-    raise ValueError(f"Could not geocode '{q}'")
+    c = _find(city)
+    if not c:
+        raise ValueError(f"Could not geocode city '{city}'")
+    out = (c[0], c[1], city)
+    if area:
+        a = _find(q)
+        # the area must actually be in (or right next to) that city — rejects same-named places elsewhere
+        if a and haversine_km(a[0], a[1], c[0], c[1]) <= 60:
+            out = (a[0], a[1], f"{a[2]}, {city}" if city.lower() not in a[2].lower() else a[2])
+        elif notes is not None:
+            notes.append(f"Couldn't pinpoint “{area}” in {city} — planning from central {city}")
+    cache_set("geocode", q.lower(), out)
+    return out
 
 
 def _hm(s: str) -> tuple[int, int]:
@@ -52,7 +107,7 @@ class LocationNotFound(Exception):
 
 def build_context(p: UserProfile, trace) -> DayContext:
     try:
-        lat, lon, label = geocode(p.city, p.area)
+        lat, lon, label = geocode(p.city, p.area, p.assumptions)
     except Exception as e:
         raise LocationNotFound(f"{p.area}, {p.city}") from e
     trace("Context", f"{p.area or ''} {p.city}".strip(), f"Geocoded to {label} ({lat:.4f}, {lon:.4f})")
