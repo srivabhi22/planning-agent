@@ -1,0 +1,26 @@
+# Render Blueprint — free web service built from the Dockerfile.
+# Secrets (sync: false) are entered once in the Render dashboard, never committed.
+services:
+  - type: web
+    name: saturday-planner
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: LOG_FORMAT
+        value: json
+      - key: PLAN_RATE_LIMIT
+        value: "6/600"
+      - key: DAILY_PLAN_LIMIT
+        value: "200"
+      - key: MAX_CONCURRENT_PLANS
+        value: "3"
