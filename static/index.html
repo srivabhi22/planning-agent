@@ -4,94 +4,149 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Saturday Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  body { margin:0; font:15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#fafafa; color:#222; }
-  .wrap { max-width:720px; margin:0 auto; padding:24px 16px 60px; }
-  h1 { font-size:22px; margin:0 0 4px; } .sub { color:#666; margin:0 0 20px; }
-  .box { background:#fff; border:1px solid #e3e3e3; border-radius:8px; padding:18px; margin-bottom:16px; }
-  label { display:block; font-size:13px; font-weight:600; margin:12px 0 4px; }
-  label span { font-weight:400; color:#888; }
-  input, textarea { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid #d6d6d6; border-radius:6px; font:inherit; }
-  textarea { min-height:80px; resize:vertical; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+  :root { --bg:#141414; --panel:#1a1a1a; --line:#3a3a3a; --line2:#2a2a2a; --fg:#e6e6e6; --dim:#8a8a8a; --faint:#5a5a5a;
+          --accent:#c4b5fd; --ok:#86efac; --warn:#fcd34d; --bad:#fca5a5;
+          --mono:"IBM Plex Mono", ui-monospace, Menlo, monospace; --sans:Inter, system-ui, sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 var(--mono); background:var(--bg); color:var(--fg); min-height:100vh; }
+  body::after { content:""; position:fixed; top:0; right:0; width:42vw; height:100vh; pointer-events:none; z-index:0;
+    background-image:linear-gradient(var(--line2) 1px, transparent 1px), linear-gradient(90deg, var(--line2) 1px, transparent 1px);
+    background-size:110px 110px; -webkit-mask-image:linear-gradient(90deg, transparent, #000 60%); mask-image:linear-gradient(90deg, transparent, #000 60%); }
+  @media (max-width:900px) { body::after { display:none; } }
+  .wrap { position:relative; z-index:1; max-width:760px; margin:0; padding:56px 16px 80px 7vw; }
+  @media (max-width:600px) { .wrap { padding:32px 16px 60px; } }
+  .brand { font:600 20px var(--sans); display:flex; align-items:center; gap:10px; margin-bottom:36px; }
+  .brand i { width:18px; height:18px; background:var(--fg); border-radius:0 9px 0 0; display:inline-block; }
+  .log { color:var(--fg); text-transform:uppercase; letter-spacing:.06em; margin:0 0 10px; }
+  .log time { color:var(--faint); margin-right:10px; }
+  .sub { color:var(--dim); margin:0 0 28px; max-width:560px; }
+  .box { border:1px dashed var(--line); outline:1px solid var(--line2); outline-offset:5px; padding:22px; margin:10px 5px 24px; background:rgba(20,20,20,.85); }
+  .step { color:var(--accent); font-size:12px; letter-spacing:.12em; text-transform:uppercase; margin:22px 0 4px; }
+  .step:first-child { margin-top:0; }
+  label { display:block; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--fg); margin:14px 0 6px; }
+  label span { color:var(--faint); text-transform:none; letter-spacing:0; }
+  .hint { color:var(--faint); font-size:12px; margin-top:4px; }
+  input, textarea, select { width:100%; padding:10px 12px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:0; font:inherit; outline:none; }
+  input::placeholder, textarea::placeholder { color:var(--faint); }
+  input:focus, textarea:focus, select:focus { border-color:var(--accent); }
+  input.bad { border-color:var(--bad); }
+  input[type=number]::-webkit-inner-spin-button { opacity:.4; }
+  textarea { min-height:84px; resize:vertical; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
   @media (max-width:560px) { .grid { grid-template-columns:1fr; } }
-  button { padding:10px 18px; border:0; border-radius:6px; background:#222; color:#fff; font:inherit; font-weight:600; cursor:pointer; }
-  button.ghost { background:none; color:#222; border:1px solid #ccc; }
-  .actions { margin-top:16px; display:flex; gap:10px; }
+  .unit { display:flex; align-items:stretch; }
+  .unit input { flex:1; } .unit em { font-style:normal; border:1px solid var(--line); border-left:0; padding:10px 12px; color:var(--dim); }
+  .time { display:flex; align-items:center; gap:6px; }
+  .time input { width:64px; text-align:center; } .time b { color:var(--dim); }
+  .ampm { display:flex; margin-left:6px; border:1px solid var(--line); }
+  .ampm button { background:none; color:var(--dim); padding:9px 12px; border:0; font-weight:500; }
+  .ampm button.on { background:var(--fg); color:var(--bg); }
+  button { padding:12px 20px; border:1px solid var(--fg); border-radius:0; background:var(--fg); color:var(--bg); font:600 13px var(--mono);
+           letter-spacing:.1em; text-transform:uppercase; cursor:pointer; }
+  button:hover { background:var(--accent); border-color:var(--accent); }
+  button.ghost { background:none; color:var(--fg); border-color:var(--line); } button.ghost:hover { border-color:var(--fg); }
+  .actions { margin-top:22px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
   .stages { list-style:none; padding:0; margin:0; }
-  .stages li { padding:6px 0; color:#888; } .stages li.done { color:#222; } .stages li.done::before { content:"✓ "; color:#16a34a; }
-  .stages li.now { color:#222; font-weight:600; } .stages li.now::before { content:"… "; }
-  .q { margin:6px 0; padding-left:14px; border-left:3px solid #f59e0b; }
-  .err { color:#b91c1c; }
-  .facts { color:#555; font-size:14px; margin:4px 0 14px; }
-  .stop { padding:12px 0; border-top:1px solid #eee; display:grid; grid-template-columns:90px 1fr; gap:10px; }
-  .t { font-weight:700; font-variant-numeric:tabular-nums; } .t small { display:block; font-weight:400; color:#888; }
-  .stop h3 { margin:0; font-size:16px; } .stop h3 a { color:inherit; }
-  .meta { font-size:13px; color:#777; } .why { margin:4px 0 0; }
-  .tip { font-size:13px; color:#555; margin-top:2px; }
-  .leg { font-size:13px; color:#888; padding:4px 0 4px 100px; }
-  ul.notes { margin:6px 0 0; padding-left:18px; }
-  details { margin-top:14px; } summary { cursor:pointer; font-weight:600; }
-  .ev { border-top:1px solid #eee; padding:8px 0; font-size:13px; }
-  .ev b { font-size:14px; } .ev .in { color:#777; } .ev ul { margin:4px 0; padding-left:18px; }
-  .ev .tools { color:#6b21a8; font-family:ui-monospace, Menlo, monospace; font-size:12px; }
+  .sec { padding:10px 0; border-top:1px dashed var(--line2); } .sec:first-child { border-top:0; padding-top:0; }
+  .sec h4 { margin:0; font:500 13px var(--mono); text-transform:uppercase; letter-spacing:.08em; color:var(--faint); }
+  .sec h4 .n { color:var(--faint); margin-right:8px; }
+  .sec.now h4, .sec.done h4 { color:var(--fg); } .sec.now h4 .n, .sec.done h4 .n { color:var(--accent); }
+  .sec.done h4::after { content:" ✓"; color:var(--ok); }
+  .sec.now h4::after { content:" ..."; animation:blink 1s steps(2) infinite; }
+  .sec ul { list-style:none; margin:6px 0 0; padding:0 0 0 22px; font-size:12px; }
+  .sec li { padding:2px 0; color:var(--dim); } .sec li time { color:var(--faint); margin-right:8px; }
+  .sec li.st { color:#cfcfcf; } .sec li.tr { color:var(--dim); padding-left:14px; }
+  .sec li.tr b { color:#bdbdbd; font-weight:500; }
+  @keyframes blink { 50% { opacity:0; } }
+  .spin { display:inline-block; width:12px; height:12px; border:1.5px solid var(--dim); border-right-color:transparent; border-radius:50%;
+          animation:rot 1s linear infinite; margin-right:10px; vertical-align:-1px; }
+  @keyframes rot { to { transform:rotate(360deg); } }
+  .q { margin:8px 0; padding-left:14px; border-left:2px solid var(--warn); }
+  .err { color:var(--bad); font-size:12px; margin-top:4px; }
+  .meta { font-size:12px; color:var(--dim); } .why { margin:6px 0 0; color:#cfcfcf; font-family:var(--sans); }
+  .tip { font-size:13px; color:var(--dim); margin-top:4px; font-family:var(--sans); }
+  ul.notes { margin:6px 0 0; padding-left:18px; color:#cfcfcf; font-family:var(--sans); }
+  details { margin-top:18px; border-top:1px dashed var(--line); padding-top:12px; }
+  summary { cursor:pointer; text-transform:uppercase; letter-spacing:.08em; font-size:12px; color:var(--accent); }
+  .ev { border-top:1px solid var(--line2); padding:8px 0; font-size:12px; }
+  .ev b { font-size:13px; } .ev .in { color:var(--dim); } .ev ul { margin:4px 0; padding-left:18px; }
   [hidden] { display:none !important; }
-  /* timeline */
-  .flow { margin-top:18px; }
+  h2 { font:600 20px var(--sans); margin:0; }
+  .flow { margin-top:20px; }
   .node, .edge { display:grid; grid-template-columns:36px 1fr; column-gap:14px; }
   .rail { position:relative; display:flex; justify-content:center; }
-  .badge { position:relative; z-index:1; width:30px; height:30px; margin-top:12px; border-radius:50%; background:#1a73e8; color:#fff;
-           font-weight:700; font-size:14px; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 4px #fff, 0 1px 3px rgba(0,0,0,.25); }
-  .badge.start { background:#fff; border:3px solid #1a73e8; width:24px; height:24px; }
-  .badge.end { background:#fff; border:3px solid #188038; width:24px; height:24px; }
-  .node .rail::after { content:""; position:absolute; top:0; bottom:0; width:0; border-left:3px solid #e3e3e3; }
+  .badge { position:relative; z-index:1; width:28px; height:28px; margin-top:12px; background:var(--fg); color:var(--bg);
+           font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 4px var(--bg); }
+  .badge.start { background:var(--bg); border:2px solid var(--accent); width:20px; height:20px; }
+  .node .rail::after { content:""; position:absolute; top:0; bottom:0; border-left:1px dashed var(--line); }
   .node.first .rail::after { top:24px; } .node.last .rail::after { bottom:calc(100% - 24px); }
-  .card { background:#fff; border:1px solid #e6e6e6; border-radius:10px; padding:10px 14px; margin:4px 0; }
+  .card { border:1px solid var(--line); padding:12px 14px; margin:4px 0; background:var(--panel); }
   .card .top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; flex-wrap:wrap; }
-  .card .when { font-size:13px; color:#1a73e8; font-weight:600; font-variant-numeric:tabular-nums; }
-  .card .dur { font-size:12px; color:#888; }
-  .card h3 { margin:2px 0 2px; font-size:16px; } .card h3 a { color:inherit; text-decoration:none; } .card h3 a:hover { color:#1a73e8; }
-  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 2px; }
-  .chip { font-size:12px; background:#f1f3f4; color:#444; border-radius:999px; padding:1px 9px; }
-  .chip.meal { background:#fef3e2; color:#b06000; } .chip.web { background:#e6f4ea; color:#137333; }
-  .edge .rail::after { content:""; position:absolute; top:0; bottom:0; width:0; border-left:3px solid var(--c, #ccc); }
+  .card .when { font-size:12px; color:var(--accent); letter-spacing:.04em; }
+  .card .dur { font-size:12px; color:var(--dim); }
+  .card h3 { margin:4px 0; font:600 16px var(--sans); } .card h3 a { color:inherit; text-decoration:none; } .card h3 a:hover { color:var(--accent); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }
+  .chip { font-size:11px; border:1px solid var(--line); color:var(--dim); padding:1px 8px; text-transform:uppercase; letter-spacing:.04em; }
+  .chip.meal { color:var(--warn); border-color:#5c4a1a; } .chip.web { color:var(--ok); border-color:#1f4d2e; }
+  .edge .rail::after { content:""; position:absolute; top:0; bottom:0; border-left:2px solid var(--c, var(--line)); }
   .edge .rail.walk::after { border-left-style:dotted; }
   .edge .leg-row { display:flex; align-items:center; min-height:42px; }
-  .pill { display:inline-flex; gap:6px; align-items:center; font-size:13px; background:#fff; border:1px solid var(--c, #ddd);
-          border-radius:999px; padding:3px 11px; color:#333; }
-  .pill b { color:var(--c, #333); font-weight:600; }
-  .summary-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-.err{color:#b42318;font-size:12px;margin-top:4px}
+  .pill { display:inline-flex; gap:6px; align-items:center; font-size:12px; border:1px solid var(--line); padding:2px 10px; color:var(--dim); }
+  .pill b { color:var(--c, var(--fg)); font-weight:500; }
+  .summary-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  a.cta { color:var(--accent); text-decoration:none; text-transform:uppercase; letter-spacing:.08em; font-size:13px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header id="intro"><h1>Saturday Planner</h1>
-  <p class="sub">Tell me where you are, who's coming, how long you have and what you like — I'll plan the route.</p></header>
+  <div class="brand"><i></i>Saturday Planner</div>
+  <header id="intro">
+    <p class="log"><time id="clock"></time>Planner ready ...</p>
+    <p class="sub">Tell me where you are, who's coming and what you like. I'll build a timed route with travel between stops.</p>
+  </header>
 
   <!-- 1. input -->
   <section id="v-form">
     <div class="box">
-      <label>Describe your Saturday <span>(free text — optional if you fill the form)</span></label>
-      <textarea id="text" placeholder="e.g. Two of us in Indiranagar, free from 4 PM for about 5 hours. We love quiet cafes, lakes and some live music."></textarea>
+      <div class="step">01 / Where &amp; who</div>
       <div class="grid">
         <div><label>City</label><input id="city" placeholder="Bangalore"></div>
-        <div><label>Area / starting point</label><input id="area" placeholder="Indiranagar"></div>
-        <div><label>Number of people</label><input id="group_size" type="number" min="1" placeholder="2"></div>
-        <div><label>Time available <span>(default: full day)</span></label><input id="available_time" placeholder="full day"></div>
-        <div><label>Start time <span>(default: 10 AM)</span></label><input id="start_time" placeholder="10:00 AM" pattern="^(0?[1-9]|1[0-2]):[0-5][0-9] ?([AaPp][Mm])$" title="Use the format 10:30 AM"><div id="time_err" class="err" hidden>Use the format HH:MM AM/PM, e.g. 10:30 AM</div></div>
-        <div><label>Budget ₹ <span>(optional)</span></label><input id="budget" type="number" placeholder="no limit"></div>
+        <div><label>Starting area</label><input id="area" placeholder="Indiranagar"></div>
+        <div><label>People</label><input id="group_size" type="number" min="1" max="50" step="1" inputmode="numeric" placeholder="2"></div>
+        <div><label>Budget <span>(total ₹, optional)</span></label><input id="budget" type="number" min="0" step="1" inputmode="numeric" placeholder="No limit"></div>
       </div>
-      <label>Kinds of places you'd like</label><input id="interests" placeholder="cafes, lakes, live music, museums…">
-      <label>Anything to avoid or keep in mind <span>(optional)</span></label><input id="constraints" placeholder="vegetarian, avoid crowds…">
-      <div class="actions"><button id="go">Plan my Saturday</button></div>
+
+      <div class="step">02 / When</div>
+      <div class="grid">
+        <div><label>Hours available <span>(blank = full day)</span></label>
+          <div class="unit"><input id="available_time" type="number" min="1" max="16" step="1" inputmode="numeric" placeholder="5"><em>hrs</em></div>
+          <div id="hrs_err" class="err" hidden>Enter whole hours between 1 and 16.</div></div>
+        <div><label>Start time <span>(blank = 10:00 AM)</span></label>
+          <div class="time">
+            <input id="st_h" inputmode="numeric" maxlength="2" placeholder="10" aria-label="Hour"><b>:</b>
+            <input id="st_m" inputmode="numeric" maxlength="2" placeholder="00" aria-label="Minute">
+            <div class="ampm" id="ampm"><button type="button" data-v="AM" class="on">AM</button><button type="button" data-v="PM">PM</button></div>
+          </div>
+          <div id="time_err" class="err" hidden>Hour 1–12, minutes 00–59.</div></div>
+      </div>
+
+      <div class="step">03 / What you like</div>
+      <label>Kinds of places</label><input id="interests" placeholder="cafes, lakes, live music, museums">
+      <label>Avoid / keep in mind <span>(optional)</span></label><input id="constraints" placeholder="vegetarian, avoid crowds">
+      <label>Anything else <span>(free text, optional)</span></label>
+      <textarea id="text" placeholder="e.g. It's my partner's birthday, we'd love a nice dinner spot to end the day."></textarea>
+
+      <div class="actions"><button id="go">Plan my Saturday →</button></div>
     </div>
   </section>
 
   <!-- 2. clarify -->
   <section id="v-ask" hidden>
     <div class="box">
-      <b>A couple of things before I plan:</b>
+      <div class="step">A couple of questions first</div>
       <div id="questions"></div>
       <label>Your answer</label>
       <textarea id="answer" placeholder="Answer here…"></textarea>
@@ -101,7 +156,7 @@
 
   <!-- 3. progress -->
   <section id="v-progress" hidden>
-    <div class="box"><ul class="stages" id="stages"></ul></div>
+    <p class="log"><span class="spin"></span>Building your plan</p><div class="box"><ul class="stages" id="stages"></ul></div>
   </section>
 
   <!-- 4. result -->
@@ -117,7 +172,10 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const fmtT = iso => new Date(iso).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
 const MODE = {walk:"walk", cab:"cab", auto:"auto", drive:"drive", metro:"metro", bus:"bus"};
-const FIELDS = ["city","area","group_size","available_time","start_time","budget","interests","constraints"];
+const SECTIONS = ["Understanding User Request", "Building Context", "Shaping the Day", "Finding Places", "Building the Route"];
+const FIELDS = ["city","area","group_size","available_time","budget","interests","constraints"];
+const now = () => new Date().toLocaleTimeString("en-GB");
+$("clock").textContent = now();
 let extraText = "", traceEvents = [], gotFinal = false, runRef = "";
 
 function show(v) {
@@ -126,28 +184,48 @@ function show(v) {
   window.scrollTo(0, 0);
 }
 
-const TIME_RE = /^(0?[1-9]|1[0-2]):([0-5][0-9]) ?([AaPp][Mm])$/;
-function to24(v) {  // "7:30 PM" → "19:30"
-  const m = v.trim().match(TIME_RE);
-  let h = Number(m[1]) % 12; if (m[3].toUpperCase() === "PM") h += 12;
-  return String(h).padStart(2, "0") + ":" + m[2];
+let ampm = "AM";
+document.querySelectorAll("#ampm button").forEach(b => b.onclick = () => {
+  ampm = b.dataset.v; document.querySelectorAll("#ampm button").forEach(x => x.classList.toggle("on", x === b));
+});
+// digits only in integer fields
+["group_size","budget","available_time","st_h","st_m"].forEach(id => $(id).addEventListener("input", e => {
+  const v = e.target.value.replace(/\D/g, ""); if (v !== e.target.value) e.target.value = v;
+}));
+$("st_h").addEventListener("input", e => { if (e.target.value.length === 2) $("st_m").focus(); });
+$("st_m").addEventListener("blur", e => { if (e.target.value.length === 1) e.target.value = "0" + e.target.value; });
+
+function startTime() {  // → "HH:MM" 24h, "" if blank, null if invalid
+  const h = $("st_h").value, m = $("st_m").value;
+  if (!h && !m) return "";
+  const hh = Number(h), mm = m ? Number(m) : 0;
+  if (!h || hh < 1 || hh > 12 || mm > 59) return null;
+  const h24 = (hh % 12) + (ampm === "PM" ? 12 : 0);
+  return String(h24).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+}
+function validate() {
+  const st = startTime(), hrs = $("available_time").value, badH = hrs && (+hrs < 1 || +hrs > 16);
+  $("time_err").hidden = st !== null; $("st_h").classList.toggle("bad", st === null); $("st_m").classList.toggle("bad", st === null);
+  $("hrs_err").hidden = !badH; $("available_time").classList.toggle("bad", !!badH);
+  if (st === null) { $("st_h").focus(); return false; }
+  if (badH) { $("available_time").focus(); return false; }
+  return true;
 }
 function collect() {
   const form = {};
   FIELDS.forEach(k => { const v = $(k).value.trim(); if (v) form[k] = v; });
   if (form.group_size) form.group_size = Number(form.group_size);
   if (form.budget) form.budget = Number(form.budget);
-  if (form.start_time) form.start_time = to24(form.start_time);
+  if (form.available_time) form.available_time = form.available_time + " hours";
+  const st = startTime(); if (st) form.start_time = st;
   return form;
 }
 
 async function submit() {
-  const st = $("start_time").value.trim();
-  $("time_err").hidden = !st || TIME_RE.test(st);
-  if (!$("time_err").hidden) { $("start_time").focus(); return; }
+  if (!validate()) return;
   const text = [$("text").value.trim(), extraText].filter(Boolean).join("\n\n");
-  if (!text && !Object.keys(collect()).length) { $("text").focus(); return; }
-  traceEvents = []; gotFinal = false; runRef = ""; $("stages").innerHTML = ""; show("progress");
+  if (!text && !Object.keys(collect()).length) { $("city").focus(); return; }
+  traceEvents = []; gotFinal = false; runRef = ""; initSections(); show("progress");
   try {
     const res = await fetch("/api/plan", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({form: collect(), text})});
     if (!res.ok) {  // rate limit / busy / validation errors come back as plain JSON
@@ -169,15 +247,27 @@ function handle(m) {
   if (["clarify", "error", "result"].includes(m.type)) gotFinal = true;
   if (m.type === "run") { runRef = m.ref; return; }
   if (m.type === "stage") {
-    [...$("stages").children].forEach(li => { li.className = "done"; });
-    const li = document.createElement("li"); li.className = "now"; li.textContent = m.label; $("stages").appendChild(li);
-  } else if (m.type === "trace") traceEvents.push(m.event);
+    const n = m.section || 1;
+    [...$("stages").children].forEach((el, i) => { el.className = "sec" + (i + 1 < n ? " done" : i + 1 === n ? " now" : ""); });
+    addLog(n, "st", `<time>${now()}</time>${esc(m.label)}`);
+  } else if (m.type === "trace") {
+    const e = {...m.event, section: m.section || 1}; traceEvents.push(e);
+    addLog(e.section, "tr", `<b>${esc(e.step)}</b> — ${esc(e.output)}`);
+  }
   else if (m.type === "clarify") {
     $("questions").innerHTML = m.questions.map(q => `<p class="q">${esc(q)}</p>`).join("");
     $("answer").value = ""; show("ask"); $("answer").focus();
     window._lastQuestions = m.questions;
   } else if (m.type === "error") fail(m.message, m.ref);
   else if (m.type === "result") render(m.data);
+}
+
+function initSections() {
+  $("stages").innerHTML = SECTIONS.map((t, i) => `<li class="sec"><h4><span class="n">0${i + 1}</span>${t}</h4><ul></ul></li>`).join("");
+}
+function addLog(n, cls, html) {
+  const ul = $("stages").children[n - 1]?.querySelector("ul"); if (!ul) return;
+  const li = document.createElement("li"); li.className = cls; li.innerHTML = html; ul.appendChild(li);
 }
 
 function fail(msg, ref) {
@@ -198,11 +288,15 @@ $("again").onclick = () => { extraText = ""; show("form"); };
 
 function traceHtml() {
   if (!traceEvents.length) return "";
-  return `<details><summary>What the agent did</summary>${traceEvents.map(e => `
+  const ev = e => `
     <div class="ev"><b>${esc(e.step)}</b> ${e.input ? `<span class="in">— ${esc(e.input)}</span>` : ""}
       <div>${esc(e.output)}</div>
       ${e.decisions?.length ? `<ul>${e.decisions.map(d => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}
-    </div>`).join("")}</details>`;
+    </div>`;
+  return `<details><summary>What the agent did</summary>${SECTIONS.map((t, i) => {
+    const evs = traceEvents.filter(e => e.section === i + 1);
+    return evs.length ? `<div class="step">0${i + 1} / ${t}</div>${evs.map(ev).join("")}` : "";
+  }).join("")}</details>`;
 }
 
 const MODE_ICON = {walk:"🚶 Walk", auto:"🛺 Auto", cab:"🚕 Cab", metro:"🚇 Metro", bus:"🚌 Bus", drive:"🚗 Drive"};

@@ -6,6 +6,19 @@ sensible way to get from one stop to the next — with a one-line reason for eve
 
 **Live app:** https://saturday-planner.onrender.com/
 
+## Demo run
+
+**Input** — 8 people starting from IIT Kanpur, 8 hours from 5:00 PM, into clubs, bars & restaurants and college
+hangout spots, celebrating the end of exams:
+
+![Demo input form](docs/images/demo-input.png)
+
+**Output** — *"A Lively Night Out"*: an auto ride to dinner at Moodys Cafe (7:15–8:45 PM), then The Jolly Jester
+Bar & Club (10:53 PM–12:53 AM). Each leg shows travel time, distance and cost, each stop has a rating, a cost range
+for the group, a reason and a tip, and the plan ends with a "Good to know" list of trade-offs:
+
+![Demo plan result](docs/images/demo-result.png)
+
 ---
 
 ## Architecture

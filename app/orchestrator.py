@@ -40,20 +40,29 @@ class _Timer:
         self.t, self.name = now, name
 
 
+SECTIONS = ["Understanding User Request", "Building Context", "Shaping the Day",
+            "Finding Places", "Building the Route"]
+
+
 def run(form: dict, free_text: str | None, emit) -> dict:
     notes: list[str] = []
     timer = _Timer()
 
+    cur = {"section": 1}
+
     def trace(step, inp="", out="", decisions=None):
         log.info("[%s] %s | %s", step, inp, out, extra={"event": "step", "stage": step})
-        emit({"type": "trace", "event": TraceEvent(step=step, input=inp, output=out, decisions=decisions or []).model_dump()})
+        emit({"type": "trace", "section": cur["section"],
+              "event": TraceEvent(step=step, input=inp, output=out, decisions=decisions or []).model_dump()})
 
-    def stage(label):
+    def stage(label, section=None):
+        if section:
+            cur["section"] = section
         timer(label)
-        emit({"type": "stage", "label": label})
+        emit({"type": "stage", "section": cur["section"], "title": SECTIONS[cur["section"] - 1], "label": label})
 
     # 1. understand the request
-    stage("Understanding your preferences")
+    stage("Reading your request", 1)
     try:
         prof, questions = parse_input(form, free_text)
     except ServiceBusy:
@@ -69,7 +78,7 @@ def run(form: dict, free_text: str | None, emit) -> dict:
            "Planning around the kinds of places asked for" if prof.focused else "No specific kinds of places — balanced day"])
 
     # 2. day context: location, time window, weather; local transport + holiday (one LLM call, cached)
-    stage("Checking the weather and your time window")
+    stage("Finding your start point, time window and weather", 2)
     try:
         ctx = build_context(prof, trace)
     except LocationNotFound as e:
@@ -79,6 +88,7 @@ def run(form: dict, free_text: str | None, emit) -> dict:
     load_local(prof, ctx, trace)
 
     # 3. day outline + genres (the same LLM call also picks named places from web search)
+    stage("Laying out meal and activity slots", 3)
     slots = build_skeleton(prof, ctx)
     trace("Day Skeleton", f"{(ctx.end - ctx.start).total_seconds() / 3600:.1f} h window",
           " → ".join(f"{s.start:%I:%M %p} {s.type}{' 🍽' if s.is_meal else ''} ({s.target_energy})" for s in slots))
@@ -88,7 +98,7 @@ def run(form: dict, free_text: str | None, emit) -> dict:
     slots, picks = plan_genres(prof, ctx, slots, trace, snippets)
 
     # 4. places: Google Maps + web picks → pre-filter → enrich
-    stage("Finding the best spots on Google Maps")
+    stage("Searching Google Maps for each kind of place", 4)
     places = retrieve(prof, ctx, slots, trace, picks)
     places = prefilter(prof, places, trace)
     stage("Reading up on each place")
@@ -108,7 +118,7 @@ def run(form: dict, free_text: str | None, emit) -> dict:
     overrides: dict[str, int] = {}
     plans: list[Plan] = []
     explained = False
-    stage("Building the best route")
+    stage("Ranking places and building the route", 5)
     for rnd in range(MAX_CRITIC_ROUNDS + 1):
         cands = score_all(prof, ctx, slots, places, trace if rnd == 0 else (lambda *a, **k: None), banned)
         plans = sequence(prof, ctx, slots, cands, overrides)
@@ -158,7 +168,7 @@ def run(form: dict, free_text: str | None, emit) -> dict:
 
     # 6. live traffic / transit for the final plan only
     best = plans[0]
-    stage("Checking live traffic")
+    stage("Checking live traffic and costs")
     tnotes = retime_with_live_traffic(prof, ctx, best, refine)
     src = {s.leg_in.source for s in best.stops if s.leg_in and s.leg_in.mode != "walk"}
     trace("Travel Time", f"{len(best.stops)} legs", f"Sources: {', '.join(src) or 'walking only'}; "
