@@ -40,6 +40,8 @@ FAMILIES = {
 }
 FAMILY_OF = {c: f for f, cs in FAMILIES.items() for c in cs}
 
+PROPER_MEAL = {"lunch": ["restaurant", "street_food"], "dinner": ["restaurant", "street_food"]}  # never cafe/bakery
+BAR_DINNER = ("bar_pub", "live_music")  # bar & restaurants / music venues that serve full meals
 MEAL_CATS = {k for k, v in TAXONOMY.items() if v["meal"] in ("meal",)}
 FOOD_CATS = {k for k, v in TAXONOMY.items() if v["meal"]}
 
@@ -49,7 +51,7 @@ FOOD_CATS = {k for k, v in TAXONOMY.items() if v["meal"]}
 MEALS = [("breakfast", (8, 45), (7, 45), (10, 0), 50), ("lunch", (13, 0), (12, 15), (14, 30), 70),
          ("snack", (16, 45), (16, 0), (17, 45), 40), ("dinner", (20, 0), (19, 15), (21, 15), 75)]
 MEAL_OPTIONS = {"breakfast": ["breakfast", "cafe"], "lunch": ["restaurant", "street_food"],
-                "snack": ["cafe", "bakery_dessert", "street_food"], "dinner": ["restaurant"]}
+                "snack": ["cafe", "bakery_dessert", "street_food"], "dinner": ["restaurant", "street_food"]}
 
 
 def _activity_type(t: datetime, sunset: datetime) -> str:
@@ -136,7 +138,8 @@ Also, from the web results, list specific named places that are recommended and 
 
 SYSTEM = """You are planning what KINDS of places fit each time slot of someone's Saturday. Choose only from the taxonomy keys given.
 Think like a local friend: match the mood/energy target, the person's interests, the weather at that hour, and the time of day.
-- Meal slots (is_meal=true): breakfast → breakfast/cafe; lunch → restaurant/street_food; snack → cafe/bakery_dessert/street_food; dinner → restaurant (live_music or bar_pub allowed for dinner if the user wants music/nightlife).
+- Meal slots (is_meal=true): breakfast → breakfast/cafe; lunch → restaurant/street_food; snack → cafe/bakery_dessert/street_food; dinner → restaurant/street_food (bar_pub or live_music allowed for dinner if the user wants nightlife — pick bar & restaurants that serve full meals).
+- Lunch and dinner are NON-NEGOTIABLE: never put them in drop_slot_ids, and never use cafe or bakery_dessert for them — a proper meal needs a restaurant or a street-food hub.
 - Activity slots (is_meal=false) must NOT use food categories (cafe, restaurant, street_food, bakery_dessert, breakfast) — food belongs only in meal slots.
 - Tired/low energy → low-effort genres (cafe, gallery, garden_lake, viewpoint, bookstore, arts_centre), avoid 'games' and 'market'.
 - Rain or heat at that hour → indoor genres. A 'sunset' slot should get scenic outdoor genres (viewpoint, garden_lake, park) unless it is raining.
@@ -163,7 +166,8 @@ def plan_genres(p: UserProfile, ctx: DayContext, slots: list[Slot], trace, snipp
         gp = llm_parse(SYSTEM + WEB_RULE, user, _GenrePlan)
         picks = gp.picks
         by = {g.slot_id: g for g in gp.slots}
-        drop = set(gp.drop_slot_ids) if len(slots) - len(gp.drop_slot_ids) >= 2 else set()
+        drop = {i for i in gp.drop_slot_ids if not any(s.id == i and s.type in PROPER_MEAL for s in slots)}
+        drop = drop if len(slots) - len(gp.drop_slot_ids) >= 2 else set()
         # never drop a slot if it leaves > ~2h per remaining stop (that's a dead gap, not slack)
         window_min = (ctx.end - ctx.start).total_seconds() / 60
         if drop and window_min / (len(slots) - len(drop)) > 130:
@@ -230,15 +234,26 @@ def plan_genres(p: UserProfile, ctx: DayContext, slots: list[Slot], trace, snipp
                     s.categories.append(fit[0])
                     s.note += f" (+{fam} option for a balanced day)"
                     break
+    # bar in the day + a dinner slot → one "bar & restaurant" for dinner; the activity slots get something else
+    no_bar = any("alcohol" in c.lower() for c in p.hard_constraints)
+    dinner = next((s for s in slots if s.type == "dinner"), None)
+    bar_cats = [c for c in BAR_DINNER if any(c in s.categories for s in slots) or c in p.priority_types]
+    if dinner and bar_cats and not no_bar:
+        dinner.categories = bar_cats + [c for c in dinner.categories if c not in bar_cats]
+        dinner.note += " (bar & restaurant — dinner and drinks in one stop)"
+        for s in slots:
+            if not s.is_meal and s.start < dinner.start and set(s.categories) & set(bar_cats):
+                s.categories = [c for c in s.categories if c not in bar_cats] or _fallback(p, ctx, s)
+                s.note += " (bar moved to dinner — hangout here instead)"
     # food only in meal slots; meal slots always offer their proper options
     for s in slots:
         if s.is_meal:
             opts = MEAL_OPTIONS[s.type]
-            extra = [c for c in s.categories if c in ("live_music", "bar_pub")] if s.type == "dinner" else []
-            keep = [c for c in s.categories if TAXONOMY[c]["meal"]]  # incl. interest picks like 'cafe' in a lunch slot
+            extra = [c for c in s.categories if c in BAR_DINNER] if s.type == "dinner" else []
+            keep = [c for c in s.categories if TAXONOMY[c]["meal"] and (s.type not in PROPER_MEAL or c in PROPER_MEAL[s.type] + extra)]
             s.categories = list(dict.fromkeys(keep + opts + extra))
         else:
-            s.categories = [c for c in s.categories if not TAXONOMY[c]["meal"] or c in ("live_music", "bar_pub")] or _fallback(p, ctx, s)
+            s.categories = [c for c in s.categories if not TAXONOMY[c]["meal"] or c in BAR_DINNER] or _fallback(p, ctx, s)
     trace("Genre Planner", f"{len(slots)} slots",
           " | ".join(f"{s.start:%I:%M %p} {s.type} → {', '.join(s.categories)}" for s in slots),
           [f"{s.type}: {s.note}" for s in slots])

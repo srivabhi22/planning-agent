@@ -81,6 +81,7 @@ class Place(BaseModel):
     reviews: Optional[int] = None
     price_level: Optional[int] = None  # 0..4
     veg_friendly: Optional[bool] = None
+    serves_meals: Optional[bool] = None  # Google servesLunch/servesDinner (bars that double as restaurants)
     maps_url: Optional[str] = None
     summary: Optional[str] = None
     distance_km: float = 0

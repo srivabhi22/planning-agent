@@ -40,6 +40,7 @@ Check realism, not perfection: Is it doable for this mood/energy? Are durations 
 Is a place plausibly wrong for a hard constraint (e.g. a meat-focused place for a vegetarian; a known-busy spot for someone avoiding crowds)?
 Is an area unpleasant/unsafe late at night? Is the plan too rushed or zig-zagging? Is an outdoor stop scheduled during rain/heat?
 Request swaps ONLY for real problems (max 2). Use 'replace' to get a different place for that slot, 'remove' to drop it, 'set_duration' to fix a duration.
+Lunch and dinner are non-negotiable: never 'remove' them (use 'replace' if the place is wrong), and a cafe/bakery is not a proper lunch or dinner.
 Never remove or replace the only stop that covers one of the person's stated interests unless it is truly unsuitable — the plan must still reflect what they asked for.
 If the plan is sensible, say verdict=good with no swaps. Never nitpick style."""
 

@@ -59,7 +59,10 @@ def sequence(p: UserProfile, ctx: DayContext, slots: list[Slot], cands: dict[str
             sk = _State(stops=st.stops, t=st.t, loc=st.loc, cost=st.cost, score=st.score - skip_pen,
                         penalties=st.penalties + [f"skipped {slot.type}"], last_meal_end=st.last_meal_end,
                         last_heavy_meal_end=st.last_heavy_meal_end, active_since=st.active_since, skipped=st.skipped + 1)
-            nxt.append(sk)
+            must_eat = slot.type in ("lunch", "dinner")  # non-negotiable: skip only if nothing fits from here
+            if not must_eat:
+                nxt.append(sk)
+            n_before = len(nxt)
             used = {s.place.id for s in st.stops}
             for c in cands.get(slot.id, []):
                 pl = c.place
@@ -102,8 +105,9 @@ def sequence(p: UserProfile, ctx: DayContext, slots: list[Slot], cands: dict[str
 
                 sc, pens = c.score, []
                 t_cat = TAXONOMY[pl.category]
-                is_food = bool(t_cat["meal"])
-                heavy = t_cat["meal"] == "meal" or pl.category in ("bar_pub",)
+                night_out = pl.category in ("bar_pub", "live_music")
+                is_food = bool(t_cat["meal"]) and not (night_out and not slot.is_meal)  # a bar in an activity slot is a hangout
+                heavy = t_cat["meal"] == "meal" or (night_out and slot.is_meal)  # bar & restaurant as the meal
                 # --- human-rhythm rules (hard) ---
                 if heavy and st.last_heavy_meal_end and (begin - st.last_heavy_meal_end) < timedelta(hours=3):
                     continue  # two proper meals need ≥3h between them
@@ -146,6 +150,8 @@ def sequence(p: UserProfile, ctx: DayContext, slots: list[Slot], cands: dict[str
                             last_heavy_meal_end=end if heavy else st.last_heavy_meal_end,
                             active_since=None if is_food else (st.active_since or begin))
                 nxt.append(ns)
+            if must_eat and len(nxt) == n_before:
+                sk.score -= 6; nxt.append(sk)
         nxt.sort(key=lambda s: s.score, reverse=True)
         beam = _diverse_prune(nxt, BEAM)
 

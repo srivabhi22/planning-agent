@@ -133,8 +133,14 @@ def score_slot(p: UserProfile, ctx: DayContext, slot: Slot, places: list[Place],
         b["distance"] = -min(1.0, pl.distance_km / 15)
         if p.vegetarian and TAXONOMY[pl.category]["meal"]:
             b["interest"] += 0.15 if pl.veg_friendly else -0.1  # unknown veg status is a small risk
-        if slot.is_meal and pl.category not in MEAL_OPTIONS[slot.type]:
-            b["meal_fit"] = -0.15 if pl.category in ("live_music", "bar_pub") else -1.0  # music venues/pubs do serve food  # a bar/music venue/cafe can fill a meal slot only if it clearly wins otherwise
+        if slot.type in ("lunch", "dinner") and pl.category in ("cafe", "bakery_dessert", "breakfast"):
+            continue  # lunch/dinner is a proper meal, not coffee and a sandwich
+        if slot.type in ("lunch", "dinner") and pl.category in ("live_music", "bar_pub"):
+            if pl.serves_meals is False:
+                continue  # drinks-only bar can't be the meal
+            b["meal_fit"] = 0.3 if pl.serves_meals else -0.3  # bar & restaurant: dinner and drinks in one stop
+        elif slot.is_meal and pl.category not in MEAL_OPTIONS[slot.type]:
+            b["meal_fit"] = -1.0
         if p.prefer_popular and pl.reviews:
             b["popular"] = min(1.0, math.log10(pl.reviews) / 4.5) * 0.6  # 30k+ reviews ≈ a city landmark
         if pl.category in p.priority_types:

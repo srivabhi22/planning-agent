@@ -283,15 +283,18 @@ def _g_place(g: dict, cat: str) -> Optional[Place]:
     veg = g.get("servesVegetarianFood")
     if g.get("primaryType") == "vegetarian_restaurant":
         veg = True
+    meals = g.get("servesLunch") or g.get("servesDinner")
+    if meals is None and any("restaurant" in t for t in g.get("types") or []):
+        meals = True  # e.g. "bar & restaurant"
     return Place(id=f"g:{g['id']}", name=name, lat=loc["latitude"], lon=loc["longitude"], category=cat, source="google",
                  address=g.get("formattedAddress"), rating=g.get("rating"), reviews=g.get("userRatingCount"),
-                 price_level=PL.get(g.get("priceLevel")), veg_friendly=veg, maps_url=g.get("googleMapsUri"),
+                 price_level=PL.get(g.get("priceLevel")), veg_friendly=veg, serves_meals=meals, maps_url=g.get("googleMapsUri"),
                  sat_hours=_best_hours(g)[0], hours_source=_best_hours(g)[1],
                  summary=(g.get("editorialSummary") or {}).get("text"))
 
 
 G_FIELDS = ("places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.priceLevel,"
-            "places.regularOpeningHours,places.primaryType,places.servesVegetarianFood,places.formattedAddress,"
+            "places.regularOpeningHours,places.primaryType,places.servesVegetarianFood,places.servesLunch,places.servesDinner,places.formattedAddress,"
             "places.googleMapsUri,places.editorialSummary,places.businessStatus,places.types,places.currentOpeningHours")
 
 

@@ -153,6 +153,8 @@ def run(form: dict, free_text: str | None, emit) -> dict:
             if not (0 <= w.stop_index < len(best.stops)):
                 continue
             st = best.stops[w.stop_index]
+            if w.action == "remove" and st.slot_type in ("lunch", "dinner"):
+                w.action = "replace"  # lunch/dinner is non-negotiable: swap the restaurant, never drop the meal
             if w.action == "replace":
                 banned.add(st.place.id); changed = True
             elif w.action == "remove":
