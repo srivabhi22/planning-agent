@@ -61,6 +61,7 @@
           border-radius:999px; padding:3px 11px; color:#333; }
   .pill b { color:var(--c, #333); font-weight:600; }
   .summary-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.err{color:#b42318;font-size:12px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -78,7 +79,7 @@
         <div><label>Area / starting point</label><input id="area" placeholder="Indiranagar"></div>
         <div><label>Number of people</label><input id="group_size" type="number" min="1" placeholder="2"></div>
         <div><label>Time available <span>(default: full day)</span></label><input id="available_time" placeholder="full day"></div>
-        <div><label>Start time <span>(default: 10 AM)</span></label><input id="start_time" type="time"></div>
+        <div><label>Start time <span>(default: 10 AM)</span></label><input id="start_time" placeholder="10:00 AM" pattern="^(0?[1-9]|1[0-2]):[0-5][0-9] ?([AaPp][Mm])$" title="Use the format 10:30 AM"><div id="time_err" class="err" hidden>Use the format HH:MM AM/PM, e.g. 10:30 AM</div></div>
         <div><label>Budget ₹ <span>(optional)</span></label><input id="budget" type="number" placeholder="no limit"></div>
       </div>
       <label>Kinds of places you'd like</label><input id="interests" placeholder="cafes, lakes, live music, museums…">
@@ -125,15 +126,25 @@ function show(v) {
   window.scrollTo(0, 0);
 }
 
+const TIME_RE = /^(0?[1-9]|1[0-2]):([0-5][0-9]) ?([AaPp][Mm])$/;
+function to24(v) {  // "7:30 PM" → "19:30"
+  const m = v.trim().match(TIME_RE);
+  let h = Number(m[1]) % 12; if (m[3].toUpperCase() === "PM") h += 12;
+  return String(h).padStart(2, "0") + ":" + m[2];
+}
 function collect() {
   const form = {};
   FIELDS.forEach(k => { const v = $(k).value.trim(); if (v) form[k] = v; });
   if (form.group_size) form.group_size = Number(form.group_size);
   if (form.budget) form.budget = Number(form.budget);
+  if (form.start_time) form.start_time = to24(form.start_time);
   return form;
 }
 
 async function submit() {
+  const st = $("start_time").value.trim();
+  $("time_err").hidden = !st || TIME_RE.test(st);
+  if (!$("time_err").hidden) { $("start_time").focus(); return; }
   const text = [$("text").value.trim(), extraText].filter(Boolean).join("\n\n");
   if (!text && !Object.keys(collect()).length) { $("text").focus(); return; }
   traceEvents = []; gotFinal = false; runRef = ""; $("stages").innerHTML = ""; show("progress");

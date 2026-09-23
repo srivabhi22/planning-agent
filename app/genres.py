@@ -25,7 +25,7 @@ TAXONOMY: dict[str, dict] = {
     "gallery":      dict(osm=['["tourism"="gallery"]'], google=["art_gallery"], indoor=True, energy="low", dur=45, cost=(0, 200), meal=None, interests=["art", "culture"], hours=(11, 19)),
     "arts_centre":  dict(osm=['["amenity"="arts_centre"]', '["amenity"="theatre"]'], google=["performing_arts_theater", "cultural_center"], indoor=True, energy="low", dur=90, cost=(200, 800), meal=None, interests=["culture", "art", "music", "theatre"], hours=(11, 22)),
     "live_music":   dict(osm=['["amenity"="music_venue"]', '["amenity"="pub"]["live_music"="yes"]', '["amenity"="bar"]["live_music"="yes"]'], google=["live_music_venue", "concert_hall"], indoor=True, energy="medium", dur=90, cost=(400, 1200), meal="light", interests=["music", "nightlife"], hours=(18, 24)),
-    "bar_pub":      dict(osm=['["amenity"="pub"]', '["amenity"="bar"]'], google=["pub", "bar"], indoor=True, energy="medium", dur=90, cost=(600, 1500), meal="light", interests=["nightlife", "music"], hours=(17, 24)),
+    "bar_pub":      dict(osm=['["amenity"="pub"]', '["amenity"="bar"]'], google=["pub", "bar", "night_club", "karaoke"], indoor=True, energy="medium", dur=90, cost=(600, 1500), meal="light", interests=["nightlife", "music", "clubs", "party", "karaoke", "happening"], hours=(17, 24)),
     "bookstore":    dict(osm=['["shop"="books"]'], google=["book_store"], indoor=True, energy="low", dur=40, cost=(0, 400), meal=None, interests=["books", "culture"], hours=(10, 21)),
     "market":       dict(osm=['["amenity"="marketplace"]', '["shop"="mall"]'], google=["market", "shopping_mall"], indoor=False, energy="high", dur=60, cost=(0, 500), meal=None, interests=["shopping", "food"], hours=(10, 22)),
     "cinema":       dict(osm=['["amenity"="cinema"]'], google=["movie_theater"], indoor=True, energy="low", dur=150, cost=(250, 500), meal=None, interests=["movies"], hours=(10, 24)),
@@ -141,8 +141,9 @@ Think like a local friend: match the mood/energy target, the person's interests,
 - Tired/low energy → low-effort genres (cafe, gallery, garden_lake, viewpoint, bookstore, arts_centre), avoid 'games' and 'market'.
 - Rain or heat at that hour → indoor genres. A 'sunset' slot should get scenic outdoor genres (viewpoint, garden_lake, park) unless it is raining.
 - 'avoid crowds' → avoid market, and prefer smaller venues.
+- profile.priority_types are what the user explicitly asked for: make them the FIRST choice of every slot where they're open and fit (e.g. bars/clubs for every evening slot and dinner). Other genres only fill hours they can't.
 - EVERY stated interest must be the FIRST choice of at least one slot at a time it works (live music → evening/dinner; lakes/parks → daylight, not rain; cafes → anytime). Don't repeat the same genre in consecutive slots.
-- If profile.focused is false, aim for a balanced day across activity slots: something outdoors/nature, a landmark or culture spot, and a leisure spot — alongside the user's stated interests, where timing and weather allow. If focused is true, stick to what they asked for.
+- If profile.focused is false, aim for a balanced day across activity slots: something outdoors/nature, a landmark or culture spot, and a leisure spot — alongside the user's stated interests, where timing and weather allow. If focused is true, stick to what they asked for: fill every activity slot only with genres from priority_types / their interests (repeat them across slots if needed) and never add unasked genres like parks or museums just for variety.
 - For dinner, live_music / bar_pub are fine as first choice if the user wants music (these venues serve food).
 - Evening/night slots suit live_music, arts_centre, bar_pub (if no 'no alcohol'), cafe, bakery_dessert."""
 
@@ -154,7 +155,7 @@ def plan_genres(p: UserProfile, ctx: DayContext, slots: list[Slot], trace, snipp
         ok, why = outdoor_ok(ctx, s.start.hour)
         slot_desc.append({"slot_id": s.id, "type": s.type, "time": s.start.strftime("%H:%M"), "is_meal": s.is_meal,
                           "target_energy": s.target_energy, "outdoor_ok": ok, "weather_issue": why})
-    user = (f"Profile: {p.model_dump_json(include={'mood', 'interests', 'hard_constraints', 'soft_preferences', 'budget', 'group_size', 'focused'})}\n"
+    user = (f"Profile: {p.model_dump_json(include={'mood', 'interests', 'priority_types', 'hard_constraints', 'soft_preferences', 'budget', 'group_size', 'focused'})}\n"
             f"Weather: {ctx.weather_summary}. Sunset {ctx.sunset:%H:%M}.\nSlots: {slot_desc}\nTaxonomy: {tax_desc}\n"
             f"Web results (for picks; the user starts from {p.area}, {p.city}): {snippets or '(none)'}")
     picks: list[WebPick] = []
@@ -184,9 +185,16 @@ def plan_genres(p: UserProfile, ctx: DayContext, slots: list[Slot], trace, snipp
             s.categories = _fallback(p, ctx, s)
             s.note = "rule-based genres"
         trace("Genre Planner", "", f"LLM genre planning failed ({type(e).__name__}: {str(e)[:120]}); used rule-based genres")
+    # places the user explicitly asked for come FIRST in every slot where they're open and weather allows
+    for s in slots:
+        for c in reversed(p.priority_types):
+            t = TAXONOMY[c]
+            meal_ok = s.is_meal == bool(t["meal"]) or (s.type == "dinner" and c in ("live_music", "bar_pub")) or (not s.is_meal and c in ("live_music", "bar_pub"))
+            if meal_ok and t["hours"][0] <= s.start.hour < t["hours"][1] and (t["indoor"] or outdoor_ok(ctx, s.start.hour)[0]):
+                s.categories = [c] + [x for x in s.categories if x != c]
     # guarantee every stated interest is reachable from at least one slot, at an hour its places are open
     from .sequencer import _interest_cats
-    for it in p.interests:
+    for it in p.interests + p.priority_types:
         ic = _interest_cats(it)
         if not ic or any(set(s.categories) & ic for s in slots):
             continue

@@ -66,7 +66,7 @@ def run(form: dict, free_text: str | None, emit) -> dict:
     trace("Input Parser", (free_text or str(form))[:200],
           f"{prof.area}, {prof.city} · {prof.group_size} people · budget {('₹' + format(prof.budget, ',.0f')) if prof.budget else 'not set'} · energy {' → '.join(prof.energy_curve)}",
           [f"Interests: {', '.join(prof.interests)}", f"Constraints: {', '.join(prof.hard_constraints) or 'none'}",
-           "Focused on these kinds of places" if prof.focused else "Open to a balanced day"])
+           "Planning around the kinds of places asked for" if prof.focused else "No specific kinds of places — balanced day"])
 
     # 2. day context: location, time window, weather; local transport + holiday (one LLM call, cached)
     stage("Checking the weather and your time window")

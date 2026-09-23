@@ -10,6 +10,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from .models import UserProfile
+from .genres import TAXONOMY
 from .util import llm_parse
 
 
@@ -22,18 +23,21 @@ class _Parsed(BaseModel):
     duration_hours: Optional[float] = Field(None, description="length of the outing if given ('4 hours', 'evening' is NOT a duration)")
     full_day: bool = Field(False, description="true only if the user said full day / whole day")
     interests: list[str] = Field(description="kinds of places/activities the user wants, in their words, short (e.g. 'live music', 'lakes', 'south indian food', 'art galleries')")
-    mood: Optional[str] = None
+    mood: Optional[str] = Field(None, description="ONLY if the user explicitly stated it; never infer")
     budget: Optional[float] = Field(None, description="total INR budget, ONLY if the user explicitly gave one")
     hard_constraints: list[str] = Field(description="ONLY constraints the user explicitly stated, normalised: 'vegetarian', 'vegan', 'jain', 'avoid crowds', 'no alcohol', 'wheelchair accessible', 'kid friendly'")
     soft_preferences: list[str] = Field(description="stated likes such as 'quiet', 'scenic', 'hidden gems'")
-    energy_curve: list[Literal["low", "medium", "high"]] = Field(description="4 values for start, early-mid, late-mid, end. From mood if given, else medium, medium, medium, low")
-    focused: bool = Field(description="true ONLY if the user clearly limits the day to certain kinds of places ('only cafes', 'just museums', 'a food crawl', 'pub hopping'). Listing likes ('we love cafes and lakes') is NOT focused.")
+    energy_curve: list[Literal["low", "medium", "high"]] = Field(default_factory=list, description="4 values for start, early-mid, late-mid, end — ONLY if the user explicitly states a mood/energy ('tired', 'energetic', 'lazy day'). Otherwise EMPTY; never guess.")
+    place_types: list[str] = Field(default_factory=list, description="taxonomy keys for the kinds of places the user explicitly asked for, interpreting slang (e.g. 'happening places' / 'party' / 'clubbing' → bar_pub, live_music; 'karaoke' → bar_pub; 'forts' → heritage; 'famous/tourist spots' → the kinds of places that city is famous for, e.g. Bangalore → heritage, garden_lake, market; 'good eating spots' → restaurant, cafe, street_food). Only from the allowed keys. Empty if nothing specific was asked.")
+    focused: bool = Field(description="false ONLY for open-ended requests with NO hint about kinds of places ('explore Bangalore', 'plan my Saturday') — those get a balanced mix. true whenever the user names or hints at kinds of places ('famous spots and good food', 'cafes and lakes', 'pub hopping') — then plan only around what they said.")
+    prefer_popular: bool = Field(False, description="true if they want famous / must-see / most-visited / tourist spots")
     clarifications: list[str] = Field(description="at most 2 questions, ONLY if something the user said is genuinely ambiguous and would change the plan. Do not ask about budget, food or transport. Empty if clear.")
 
 
 SYSTEM = """You read a request for planning a Saturday outing (usually an Indian city). Input = form fields (may be empty) + free text (may be empty); use both.
 If the form and the text genuinely disagree on something that matters (e.g. form says 2 people, text says 'the four of us'; different areas), add a clarification question naming both values instead of picking one.
 Extract times exactly as stated (don't "fix" an end time that is before the start time).
+Day phases, when the user names one instead of clock times: morning = 09:00–12:00, afternoon = 12:00–16:00, evening = 16:00–20:00, night = 20:00–24:00 (end_time "00:00"; later only if the user says so, e.g. 'till 2 am' → "02:00", never past 02:00). Combine phases ('afternoon and evening' = 12:00–20:00). A phase is NOT a full day.
 Extract ONLY what the user actually said. Never invent a location, group size, time or interest — leave it null/empty so the app can ask.
 Do not add constraints (food, budget, accessibility) the user didn't state. Interests should keep the user's specific wording (e.g. 'rooftop cafes', 'lakes', 'jazz')."""
 
@@ -45,7 +49,7 @@ class ServiceBusy(Exception):
 def parse_input(form: dict, free_text: str | None) -> tuple[UserProfile | None, list[str]]:
     """Returns (profile, []) when ready, or (None, questions) when required info is missing."""
     form = {k: v for k, v in (form or {}).items() if v not in (None, "", [], 0)}
-    user = f"Form fields:\n{form or '(none)'}\n\nFree text:\n{free_text or '(none)'}"
+    user = f"Allowed place_types keys: {list(TAXONOMY)}\n\nForm fields:\n{form or '(none)'}\n\nFree text:\n{free_text or '(none)'}"
     try:
         p = llm_parse(SYSTEM, user, _Parsed)
     except Exception:
@@ -81,12 +85,13 @@ def _validate(p: _Parsed) -> tuple[UserProfile | None, list[str]]:
         p.full_day = True
         if "full" not in " ".join(assumptions):
             assumptions.append("No duration given — planning the full day")
-    curve = (p.energy_curve + ["medium"] * 4)[:4] if p.energy_curve else ["medium", "medium", "medium", "low"]
+    curve = (p.energy_curve + ["medium"] * 4)[:4] if p.energy_curve and p.mood else ["medium"] * 4  # no stated mood → no energy assumption
     prof = UserProfile(
         city=p.city, area=p.area, budget=p.budget, group_size=p.group_size,
         start_time=p.start_time, end_time=p.end_time, duration_hours=None if p.full_day else p.duration_hours,
         mood=p.mood or "", energy_curve=curve, interests=[i.strip().lower() for i in p.interests],
-        hard_constraints=p.hard_constraints, soft_preferences=p.soft_preferences, transport="cab", focused=p.focused,
+        hard_constraints=p.hard_constraints, soft_preferences=p.soft_preferences, transport="cab", focused=p.focused, prefer_popular=p.prefer_popular,
+        priority_types=[c for c in dict.fromkeys(p.place_types) if c in TAXONOMY],
         assumptions=assumptions,
     )
     return prof, []
@@ -105,9 +110,11 @@ def _contradictions(p: _Parsed) -> list[str]:
     q = []
     s, e = _mins(p.start_time), _mins(p.end_time)
     fmt = lambda m: f"{m // 60 % 12 or 12}:{m % 60:02d} {'AM' if m < 720 else 'PM'}"
+    if s is not None and e is not None and e <= s and s >= 17 * 60 and e <= 2 * 60:
+        e += 24 * 60  # night out past midnight
     if s is not None and e is not None:
         if e <= s:
-            q.append(f"You said you'd start at {fmt(s)} but finish at {fmt(e)}, which is earlier. What are the right start and end times?")
+            q.append(f"You said you'd start at {fmt(s)} but finish at {fmt(e % 1440)}, which is earlier. What are the right start and end times?")
         elif p.duration_hours and abs((e - s) / 60 - p.duration_hours) > 0.75:
             q.append(f"{fmt(s)} to {fmt(e)} is {(e - s) / 60:g} hours, but you also said {p.duration_hours:g} hours. Which one is right?")
     if p.full_day and p.duration_hours and p.duration_hours < 6:

@@ -178,7 +178,10 @@ def _time_window(p: UserProfile, sat, now, is_today, sunset):
         s = max(earliest, base.replace(hour=h, minute=m))
         e = base.replace(hour=_hm(p.end_time)[0], minute=_hm(p.end_time)[1]) if p.end_time else (
             s + timedelta(hours=p.duration_hours) if p.duration_hours else day_e)
-        return s, min(e, day_e), why + [f"Starting {s:%I:%M %p}" + (f" for {p.duration_hours:g} h" if p.duration_hours else ", full day")]
+        if e <= s:
+            e += timedelta(days=1)  # night out past midnight (e.g. 8 PM – 12 AM / 2 AM)
+        cap = base + timedelta(days=1, hours=2) if (p.end_time or p.duration_hours) else day_e
+        return s, min(e, cap), why + [f"Starting {s:%I:%M %p}" + (f" for {p.duration_hours:g} h" if p.duration_hours else ", full day")]
     if p.end_time and p.duration_hours:
         h, m = _hm(p.end_time)
         e = base.replace(hour=h, minute=m)
@@ -190,7 +193,7 @@ def _time_window(p: UserProfile, sat, now, is_today, sunset):
     ints = {i.lower() for i in p.interests}
     tired = p.energy_curve[0] == "low"
     # pick the best window for the interests
-    if ints & {"music", "nightlife", "bars", "comedy"}:
+    if ints & {"music", "nightlife", "bars", "comedy"} or {"bar_pub", "live_music"} & set(p.priority_types):
         if ints & {"walks", "nature", "sunset", "photography"}:
             # catch golden hour for the walk, then music in the evening
             s = sunset - timedelta(minutes=75)

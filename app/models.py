@@ -25,7 +25,9 @@ class UserProfile(BaseModel):
     soft_preferences: list[str] = Field(default_factory=list)  # e.g. quiet, scenic, live music
     transport: Literal["cab", "auto", "own_vehicle", "walk_metro"] = "cab"
     assumptions: list[str] = Field(default_factory=list)
-    focused: bool = False  # user clearly wants only certain kinds of places → don't diversify
+    priority_types: list[str] = Field(default_factory=list)  # taxonomy keys the user explicitly asked for → included first
+    focused: bool = False
+    prefer_popular: bool = False  # famous / must-see spots wanted → favour well-known places over hidden gems  # user clearly wants only certain kinds of places → don't diversify
 
     # derived flags
     @property

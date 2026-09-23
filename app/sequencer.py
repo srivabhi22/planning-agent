@@ -162,14 +162,14 @@ def sequence(p: UserProfile, ctx: DayContext, slots: list[Slot], cands: dict[str
         # every stated interest should show up somewhere in the day (if we had any candidate for it)
         have = {s.place.category for s in st.stops}
         avail = {c.place.category for cl in cands.values() for c in cl}
-        for it in p.interests:
+        for it in p.interests + p.priority_types:
             ic = _interest_cats(it)
             if ic & avail and not ic & have:
                 sc -= 3.5  # a stated interest missing from the day is a big miss
                 outdoor = all(not TAXONOMY[c]["indoor"] for c in ic)
                 pens.append(f"{it} left out — " + ("weather/daylight didn't allow it in this window" if outdoor else "couldn't fit it into the time window"))
         # balanced day: reward covering different kinds of places (soft — never beats hard feasibility)
-        if not p.focused:
+        if not p.focused and not p.priority_types:  # asked-for kinds of places beat variety
             from .genres import FAMILY_OF
             fams = {FAMILY_OF.get(s.place.category) for s in st.stops} - {None}
             offered = {FAMILY_OF.get(c.place.category) for cl in cands.values() for c in cl} - {None}
@@ -208,6 +208,8 @@ def sequence(p: UserProfile, ctx: DayContext, slots: list[Slot], cands: dict[str
 def _interest_cats(interest: str) -> set[str]:
     """Taxonomy categories that satisfy a user interest written in their own words ('live music', 'lakes')."""
     from .places import LABEL
+    if interest in TAXONOMY:
+        return {interest}
     toks = {t.rstrip("s") for t in interest.lower().replace("-", " ").split() if len(t) > 2}
     out = set()
     for cat, meta in TAXONOMY.items():

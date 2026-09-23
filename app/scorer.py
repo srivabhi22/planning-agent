@@ -70,6 +70,10 @@ def weights(p: UserProfile) -> dict[str, float]:
         w["budget"] = 1.4
     if p.avoid_crowds:
         w["crowd"] = 1.4
+    if not p.mood:
+        w["mood"] = 0.2  # no stated mood → energy fit barely matters
+    if p.prefer_popular:
+        w["gem"] = 0.0
     if p.energy_curve.count("low") >= 3:
         w["mood"] = 1.5
         w["distance"] = 0.5  # tired people dislike long rides
@@ -131,6 +135,10 @@ def score_slot(p: UserProfile, ctx: DayContext, slot: Slot, places: list[Place],
             b["interest"] += 0.15 if pl.veg_friendly else -0.1  # unknown veg status is a small risk
         if slot.is_meal and pl.category not in MEAL_OPTIONS[slot.type]:
             b["meal_fit"] = -0.15 if pl.category in ("live_music", "bar_pub") else -1.0  # music venues/pubs do serve food  # a bar/music venue/cafe can fill a meal slot only if it clearly wins otherwise
+        if p.prefer_popular and pl.reviews:
+            b["popular"] = min(1.0, math.log10(pl.reviews) / 4.5) * 0.6  # 30k+ reviews ≈ a city landmark
+        if pl.category in p.priority_types:
+            b["priority"] = 1.0  # a kind of place the user explicitly asked for
         b["web"] = min(1.0, 0.6 * pl.web_mentions)  # recommended by blogs/lists/reddit
         sc = sum(W.get(k, 2.0) * v for k, v in b.items())
         if HOLIDAY and HOLIDAY.is_holiday:

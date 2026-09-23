@@ -219,7 +219,7 @@ LABEL = {
     "cafe": "cafes", "breakfast": "breakfast places", "restaurant": "restaurants", "street_food": "street food",
     "bakery_dessert": "desserts and bakeries", "park": "parks", "garden_lake": "lakes and gardens", "viewpoint": "viewpoints",
     "heritage": "heritage sites", "museum": "museums", "gallery": "art galleries", "arts_centre": "theatres and cultural centres",
-    "live_music": "live music venues", "bar_pub": "pubs and bars", "bookstore": "bookstores", "market": "markets",
+    "live_music": "live music venues", "bar_pub": "pubs, bars and clubs", "bookstore": "bookstores", "market": "markets",
     "cinema": "cinemas", "games": "gaming and bowling",
 }
 
@@ -239,7 +239,7 @@ TYPE_OK = {
     "gallery": ["art_gallery", "museum", "art_studio", "cultural"],
     "arts_centre": ["performing_arts", "theater", "cultural", "auditorium", "concert", "amphitheat", "event_venue", "art_"],
     "live_music": ["live_music", "concert", "night_club", "bar", "pub", "event_venue", "restaurant", "jazz"],
-    "bar_pub": ["bar", "pub", "night_club", "brewery", "brewpub", "wine", "lounge"],
+    "bar_pub": ["bar", "pub", "night_club", "brewery", "brewpub", "wine", "lounge", "karaoke"],
     "bookstore": ["book", "library"],
     "market": ["market", "shopping_mall", "shopping_center", "bazaar"],
     "cinema": ["movie_theater", "cinema"],
